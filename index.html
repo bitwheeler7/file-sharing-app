@@ -202,6 +202,65 @@
             transition: width 0.3s ease;
         }
 
+        .text-share {
+            margin-top: 25px;
+            background: #fff;
+            border: 1px solid #dde0e8;
+            border-radius: 10px;
+            padding: 20px;
+        }
+
+        .text-share textarea,
+        .text-share input {
+            width: 100%;
+            padding: 12px 14px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            margin-bottom: 12px;
+            font-size: 0.95em;
+            resize: vertical;
+            font-family: inherit;
+        }
+
+        .text-share button {
+            width: 100%;
+        }
+
+        .access-info {
+            margin-top: 20px;
+            padding: 18px;
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            color: #334155;
+            line-height: 1.6;
+        }
+
+        .access-info strong {
+            color: #1d4ed8;
+        }
+
+        .qr-share {
+            margin-top: 20px;
+            padding: 18px;
+            background: #fff;
+            border: 1px solid #e2e8f0;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        #qrCode {
+            margin: 0 auto 12px;
+            width: 220px;
+            height: 220px;
+        }
+
+        .qr-share p {
+            margin: 0;
+            font-size: 0.95em;
+            color: #475569;
+        }
+
         .status {
             margin-top: 15px;
             padding: 15px;
@@ -271,7 +330,7 @@
     <div class="container">
         <div class="header">
             <h1>📤 File Sharing App</h1>
-            <p>Share files instantly with local storage</p>
+            <p>Share files instantly over your local WiFi network</p>
         </div>
 
         <div class="content">
@@ -284,6 +343,12 @@
                     <p>or <span>click to browse</span></p>
                 </div>
                 <input type="file" id="fileInput" multiple>
+                <div class="text-share">
+                    <h3 style="margin-bottom: 10px; color: #333;">✍️ Share Text</h3>
+                    <textarea id="textMessage" rows="5" placeholder="Type or paste text here to save as a shareable text file..."></textarea>
+                    <input type="text" id="textFilename" placeholder="Optional file name, e.g. notes.txt">
+                    <button onclick="saveText()">💾 Save Text as File</button>
+                </div>
                 <div class="progress-bar" id="progressBar" style="display: none;">
                     <div class="progress-fill" id="progressFill"></div>
                 </div>
@@ -304,10 +369,21 @@
                     <input type="text" id="shareLink" readonly>
                     <button onclick="copyToClipboard()">📋 Copy Link</button>
                 </div>
+                <div class="access-info" id="accessInfo">
+                    <strong>Local WiFi Access</strong>
+                    <p>Open this app from another device on the same network using the address below.</p>
+                    <p id="accessAddress">Loading local access address...</p>
+                </div>
+                <div class="qr-share" id="qrShare">
+                    <h3 style="margin-bottom: 10px; color: #333;">📱 Scan to Connect</h3>
+                    <div id="qrCode"></div>
+                    <p id="qrLabel">QR code will appear once the local network address is detected.</p>
+                </div>
             </div>
         </div>
     </div>
 
+    <script src="qrcode.js"></script>
     <script>
         const uploadArea = document.getElementById('uploadArea');
         const fileInput = document.getElementById('fileInput');
@@ -317,6 +393,14 @@
         const status = document.getElementById('status');
         const shareLink = document.getElementById('shareLink');
         const shareLinkSection = document.getElementById('shareLinkSection');
+        const accessInfo = document.getElementById('accessInfo');
+        const accessAddress = document.getElementById('accessAddress');
+        const qrCodeContainer = document.getElementById('qrCode');
+        const qrLabel = document.getElementById('qrLabel');
+        const textMessage = document.getElementById('textMessage');
+        const textFilename = document.getElementById('textFilename');
+        let networkShareUrl = null;
+        let qrCode = null;
 
         // Upload area click
         uploadArea.addEventListener('click', () => fileInput.click());
@@ -410,24 +494,46 @@
                         data.files.forEach(file => {
                             const fileItem = document.createElement('div');
                             fileItem.className = 'file-item';
-                            fileItem.innerHTML = `
-                                <div class="file-info">
-                                    <div class="file-name">📄 ${file.name}</div>
-                                    <div class="file-size">${formatFileSize(file.size)}</div>
-                                </div>
-                                <div class="file-actions">
-                                    <a href="download.php?file=${encodeURIComponent(file.name)}" style="text-decoration: none;">
-                                        <button>⬇️ Download</button>
-                                    </a>
-                                    <button onclick="deleteFile('${file.name}')" class="delete">🗑️ Delete</button>
-                                </div>
+
+                            const fileInfo = document.createElement('div');
+                            fileInfo.className = 'file-info';
+                            fileInfo.innerHTML = `
+                                <div class="file-name">📄 ${file.name}</div>
+                                <div class="file-size">${formatFileSize(file.size)}</div>
                             `;
+
+                            const fileActions = document.createElement('div');
+                            fileActions.className = 'file-actions';
+
+                            const downloadLink = document.createElement('a');
+                            downloadLink.href = `download.php?file=${encodeURIComponent(file.name)}`;
+                            downloadLink.style.textDecoration = 'none';
+                            const downloadButton = document.createElement('button');
+                            downloadButton.textContent = '⬇️ Download';
+                            downloadLink.appendChild(downloadButton);
+
+                            fileActions.appendChild(downloadLink);
+
+                            if (isPreviewable(file.name)) {
+                                const previewButton = document.createElement('button');
+                                previewButton.textContent = '👁️ Preview';
+                                previewButton.addEventListener('click', () => previewFile(file.name));
+                                fileActions.appendChild(previewButton);
+                            }
+
+                            const deleteButton = document.createElement('button');
+                            deleteButton.className = 'delete';
+                            deleteButton.textContent = '🗑️ Delete';
+                            deleteButton.addEventListener('click', () => deleteFile(file.name));
+                            fileActions.appendChild(deleteButton);
+
+                            fileItem.appendChild(fileInfo);
+                            fileItem.appendChild(fileActions);
                             fileList.appendChild(fileItem);
                         });
 
-                        // Show share link
                         const currentUrl = window.location.href.split('?')[0];
-                        shareLink.value = currentUrl;
+                        shareLink.value = networkShareUrl || currentUrl;
                         shareLinkSection.classList.add('active');
                     }
                 })
@@ -440,6 +546,72 @@
                         </div>
                     `;
                 });
+        }
+
+        function loadServerInfo() {
+            fetch('serverinfo.php')
+                .then(response => response.json())
+                .then(data => {
+                    const currentUrl = window.location.href.split('?')[0];
+                    let addressHtml = `<strong>Current URL:</strong> ${currentUrl}`;
+                    const serverAddress = data.server_addr;
+                    if (serverAddress && !['127.0.0.1', '::1'].includes(serverAddress)) {
+                        networkShareUrl = `${location.protocol}//${serverAddress}${location.pathname}`;
+                        addressHtml += `<br/><strong>Network URL:</strong> ${networkShareUrl}`;
+                    } else {
+                        addressHtml += `<br/><strong>Network URL:</strong> Use the host machine's local IP address for other devices on the same WiFi.`;
+                    }
+                    accessAddress.innerHTML = addressHtml;
+                    if (networkShareUrl) {
+                        shareLink.value = networkShareUrl;
+                    }
+                    renderQr(networkShareUrl || currentUrl);
+                })
+                .catch(error => {
+                    console.error('Error loading server info:', error);
+                    accessAddress.textContent = 'Unable to detect local access address. Make sure this app is served from a local web server on the host machine.';
+                });
+        }
+
+        function saveText() {
+            const text = textMessage.value.trim();
+            const filename = textFilename.value.trim();
+
+            if (!text) {
+                showStatus('❌ Please enter text before saving.', 'error');
+                return;
+            }
+
+            fetch('save_text.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ text, filename })
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    showStatus(`✅ Text saved as ${data.filename}`, 'success');
+                    textMessage.value = '';
+                    textFilename.value = '';
+                    loadFiles();
+                } else {
+                    showStatus(`❌ ${data.message}`, 'error');
+                }
+            })
+            .catch(error => {
+                console.error('Error saving text:', error);
+                showStatus('❌ Unable to save text file.', 'error');
+            });
+        }
+
+        function isPreviewable(fileName) {
+            const ext = fileName.split('.').pop().toLowerCase();
+            return ['txt', 'md', 'pdf', 'png', 'jpg', 'jpeg', 'gif', 'webp', 'mp4', 'webm', 'ogg'].includes(ext);
+        }
+
+        function previewFile(filename) {
+            const previewUrl = `download.php?file=${encodeURIComponent(filename)}&preview=1`;
+            window.open(previewUrl, '_blank');
         }
 
         function deleteFile(filename) {
@@ -487,7 +659,33 @@
             showStatus('✅ Link copied to clipboard!', 'success');
         }
 
-        // Load files on page load
+        function renderQr(url) {
+            if (!url) {
+                qrLabel.textContent = 'No valid address available for QR display.';
+                qrCodeContainer.innerHTML = '';
+                return;
+            }
+
+            qrLabel.textContent = `Scan to open: ${url}`;
+            qrCodeContainer.innerHTML = '';
+
+            if (typeof QRCode === 'undefined') {
+                qrLabel.textContent = 'QR generator not loaded.';
+                return;
+            }
+
+            qrCode = new QRCode(qrCodeContainer, {
+                text: url,
+                width: 220,
+                height: 220,
+                colorDark: '#111827',
+                colorLight: '#ffffff',
+                correctLevel: QRCode.CorrectLevel.H
+            });
+        }
+
+        // Load server info and files on page load
+        loadServerInfo();
         loadFiles();
         setInterval(loadFiles, 5000); // Refresh every 5 seconds
     </script>

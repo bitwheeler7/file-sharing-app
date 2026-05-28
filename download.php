@@ -25,8 +25,11 @@ if ($realPath === false || strpos($realPath, $realUploadDir) !== 0) {
 }
 
 header('Content-Description: File Transfer');
-header('Content-Type: application/octet-stream');
-header('Content-Disposition: attachment; filename="' . basename($filePath) . '"');
+$mimeType = mime_content_type($filePath) ?: 'application/octet-stream';
+$preview = isset($_GET['preview']) && $_GET['preview'] === '1';
+
+header('Content-Type: ' . $mimeType);
+header(($preview ? 'Content-Disposition: inline; ' : 'Content-Disposition: attachment; ') . 'filename="' . basename($filePath) . '"');
 header('Content-Length: ' . filesize($filePath));
 header('Cache-Control: public, must-revalidate');
 header('Pragma: public');
